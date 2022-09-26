@@ -3,6 +3,16 @@ import gzip
 import xml.etree.ElementTree as ET
 import xmltodict
 
+# Find and analyze all tracks of a certain type
+def get_tracks_by_type(all_tracks, track_type):
+    # If there's only a single track, we get it as a dict; Make it a length-1 list instead
+    tracks = [all_tracks[track_type]] if type(all_tracks[track_type]) == dict else all_tracks[track_type]
+
+    # Analyze each track (and its devices) and return the data as a nice dict
+    return {k: v for (k, v) in [analyze_track(t) for t in tracks]}
+
+
+# Takes a single track object
 # Return a tuple (Id, dict()) where the dict has metadata on the track
 def analyze_track(track):
     return (track['@Id'], {
@@ -13,6 +23,9 @@ def analyze_track(track):
         'device_chain': analyze_devices(track['DeviceChain']['DeviceChain']['Devices']),
     })
 
+
+# Take devices object for a single track
+# Return information about the devices on that track
 def analyze_devices(devices):
     d = []
     plugin_type = 'builtin'
@@ -32,31 +45,19 @@ def analyze_devices(devices):
         d.append((name, plugin_type))
     return d
 
-# Compress the analyzed tracks into a dict
-def get_track_dict(tracks):
-    return {k: v for (k, v) in [analyze_track(t) for t in tracks]}
 
 als_file = st.file_uploader('Ableton Live Session')
 if als_file:
     compressed_data = als_file.getvalue()
     xml_data = gzip.decompress(compressed_data).decode()
-    als_dict = xmltodict.parse(xml_data)
-
-    all_tracks = als_dict['Ableton']['LiveSet']['Tracks']
-
-    # If there's only a single track, we get it as a dict; Make it a length-1 list instead
-    midi_tracks = [all_tracks['MidiTrack']] if type(all_tracks['MidiTrack']) == dict else all_tracks['MidiTrack']
-    audio_tracks = [all_tracks['AudioTrack']] if type(all_tracks['AudioTrack']) == dict else all_tracks['AudioTrack']
-    return_tracks = [all_tracks['ReturnTrack']] if type(all_tracks['ReturnTrack']) == dict else all_tracks['ReturnTrack']
-
-    midi = get_track_dict(midi_tracks)
-    audio = get_track_dict(audio_tracks)
-    returns = get_track_dict(return_tracks)
+    
+    all_tracks = xmltodict.parse(xml_data)['Ableton']['LiveSet']['Tracks']
 
     all = {
-        'Midi': midi,
-        'Audio': audio,
-        'Returns': returns
+        'Midi': get_tracks_by_type(all_tracks, 'MidiTrack'),
+        'Audio': get_tracks_by_type(all_tracks, 'AudioTrack'),
+        'Groups': get_tracks_by_type(all_tracks, 'GroupTrack'),
+        'Returns': get_tracks_by_type(all_tracks, 'ReturnTrack'),
     }
 
     st.write(all)
