@@ -3,9 +3,21 @@ import gzip
 import xml.etree.ElementTree as ET
 import xmltodict
 
+# Return a tuple (Id, dict()) where the dict has metadata on the track
+def analyze_track(track):
+    return (track['@Id'], {
+        'name': track['Name']['EffectiveName']['@Value'],
+        'color': track['Color']['@Value'],
+        'input': track['DeviceChain']['AudioInputRouting']['UpperDisplayString']['@Value'],
+        'frozen': None if 'Freeze' not in track else track['Freeze']['@Value'],
+        'device_chain': analyze_devices(track['DeviceChain']['DeviceChain']['Devices']),
+    })
+
 def analyze_devices(devices):
     d = []
     plugin_type = 'builtin'
+    if not devices:
+        return []
     for name, data in devices.items():
         if name == 'AuPluginDevice':
             name = data['PluginDesc']['AuPluginInfo']['Name']['@Value']
@@ -20,14 +32,9 @@ def analyze_devices(devices):
         d.append((name, plugin_type))
     return d
 
-def analyze_track(track):
-    return {
-        'name': track['Name']['EffectiveName']['@Value'],
-        'color': track['Color']['@Value'],
-        'input': track['DeviceChain']['AudioInputRouting']['UpperDisplayString']['@Value'],
-        'frozen': None if 'Freeze' not in track else track['Freeze']['@Value'],
-        'device_chain': analyze_devices(track['DeviceChain']['DeviceChain']['Devices']),
-    }
+# Compress the analyzed tracks into a dict
+def get_track_dict(tracks):
+    return {k: v for (k, v) in [analyze_track(t) for t in tracks]}
 
 als_file = st.file_uploader('Ableton Live Session')
 if als_file:
@@ -42,16 +49,14 @@ if als_file:
     audio_tracks = [all_tracks['AudioTrack']] if type(all_tracks['AudioTrack']) == dict else all_tracks['AudioTrack']
     return_tracks = [all_tracks['ReturnTrack']] if type(all_tracks['ReturnTrack']) == dict else all_tracks['ReturnTrack']
 
-    st.write(f"Found {len(midi_tracks)} MIDI track(s)")
-    for t in midi_tracks:
-        st.write(analyze_track(t))
-    st.write(f"Found {len(audio_tracks)} audio track(s)")
-    for t in audio_tracks:
-        st.write(analyze_track(t))
-    st.write(f"Found {len(return_tracks)} return track(s)")
-    for t in return_tracks:
-        st.write(analyze_track(t))
+    midi = get_track_dict(midi_tracks)
+    audio = get_track_dict(audio_tracks)
+    returns = get_track_dict(return_tracks)
 
-    #st.write(type(als_dict['Ableton']['LiveSet']['Tracks']['MidiTrack']))
-    #st.write(analyze_track(als_dict['Ableton']['LiveSet']['Tracks']['MidiTrack']))
-    #st.write(als_dict['Ableton']['LiveSet']['Tracks']['AudioTrack'][18])
+    all = {
+        'Midi': midi,
+        'Audio': audio,
+        'Returns': returns
+    }
+
+    st.write(all)
